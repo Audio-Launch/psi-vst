@@ -122,3 +122,50 @@ plugin packaging (prototype as standalone/web first to validate the interaction)
 5. **Relationship to Ψ** — one "spectral studio" product with Morph + Sculpt modes, or two
    sibling products sharing the engine? (Recommendation: TerraEQ leads as its own story;
    Ψ-morph becomes a mode inside the same spectral platform.)
+
+## Decisions locked (2026-07-03)
+
+- **Name:** TerraEQ (working) — no existing plugin by that name; terraeq.io/.app/.audio free (.com taken); can live under audiolab.tools.
+- **View:** time left → right; bass bottom/left, highs top/right (standard spectrogram convention).
+- **Sequencing:** the Ψ morph VST ships first (one plugin); TerraEQ is the later sculpt product on the shared STFT + phase-vocoder core.
+
+## Feature backlog — from the 5-lens gap analysis (mix, master, sound-design, repair, competitive)
+
+72 candidate gaps → prioritized. A recurring theme: many high-value items are **display/wiring over data the engine already computes** (the analysis-guided angle keeps paying off); the rest are genuinely new DSP.
+
+### Quick wins (do first — value over effort)
+1. **Gain-matched (LUFS-normalized) A/B preview** — the sharpened form of the preview-before-apply idea; `integratedLufs`+`truePeakDb` already measured, so it is wiring, and it makes every audition trustworthy (louder always sounds "better").
+2. **Numeric readout + hover-to-read Hz/dB/time** — `get_spectrum` knows each bin's exact Hz; a display layer with outsized recall/communication value.
+3. **Delta / residual monitor** — hear only what a stroke removes/adds; the mask already resynthesizes, so it is one subtraction on the existing path. The #1 "tool not toy" check.
+4. **Per-stroke solo/mute + global wet/dry blend** — small gain/UI controls that make a deep stroke stack workable.
+5. **Global tilt/shelf macro as one stroke** — most mastering EQ is one broadband gesture; a draggable tilt over the whole terrain, near-zero DSP.
+6. **Calibrated dB color legend (adjustable floor/ceiling)** — turns "height = magnitude" from vibes into quantitative editing.
+
+### Must-have (v1 table-stakes)
+- Numeric readout + typed entry per stroke (see quick wins).
+- Gain-matched A/B preview (see quick wins).
+- Delta / residual monitor (see quick wins).
+- **Mid/Side + L/R targeting per stroke, with a M/S terrain view** — de-ess only the Sides, tighten bass only in Mid; genuinely new DSP (core currently collapses to mono).
+- **Dynamic / threshold-gated strokes** (bin acts only when the hotspot is actually hot, with attack/release) — the line between a spectral processor and a blunt mask.
+- **Loop-region playback** — audition a bar/range cycling in context; nobody sculpts 3 minutes at once.
+- **Additive/creative brushes** (Raise/Boost, harmonic/air excite, Smear) on the shared phase-vocoder — a tool that only digs holes is a de-noiser; add-moves are why you open it over a synth+EQ chain.
+- **Delivery-grade render/export** — offline resynth to WAV/MP3 at target LUFS/true-peak + bit-depth/dither; no resynth-to-file path exists today.
+- **DAW plugin path (VST3/AU/CLAP) with reported latency (PDC) + automation** — the can-I-even-use-it gate.
+- **Learn-a-noise-print broadband denoise brush** — the #1 dialogue job; `noiseFloorDb` + a silence region already let it auto-offer "grab the print here".
+
+### Should-have (v2)
+- Reference-track spectrum overlay + match-to-reference target curve.
+- Log-frequency terrain view with a note/harmonic grid, snap-to-pitch, harmonic-linked strokes.
+- Adjustable STFT resolution (FFT/hop) or transient-vs-tonal mode + transient-preservation.
+- Adjustable annotation sensitivity + dismiss/pin individual hotspots.
+- Linear- vs minimum-phase toggle with honest latency + pre-ring readout.
+- Tempo/grid lock (bars/beats ruler + snap) on the time axis.
+- Presets/macros: save a stroke stack, apply across tracks/clips.
+- De-click / de-plosive heal brush + 50/60 Hz hum notch (auto-flagged).
+- De-reverb / room-echo brush wired to the existing `roomEcho` annotation.
+- Region/selection scoping (lasso or time+freq box; "process only silences" / "only this speaker" via the voice/silence regions).
+- Per-stroke + global wet/dry blend (see quick wins).
+- A/B/C/D snapshot slots with morph between two terrain states.
+
+### Nice-to-have (later)
+Sidechain / spectral-difference brush · transient/tonal (harmonic-percussive) separation · automatable/keyframed stroke depth over the timeline · de-clip restoration (wired to `clippingRegions`) · breath-control brush · phase/pre-echo artifact meter · randomize/generative + spectral morph · marker/EDL export for video editors · oversampling toggle.
