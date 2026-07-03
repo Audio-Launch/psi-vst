@@ -1,0 +1,19 @@
+# Build output
+build/
+cmake-build-*/
+out/
+*.o
+*.obj
+*.exe
+*.vst3
+*.component
+*.aaxplugin
+
+# JUCE (fetched, not vendored)
+JUCE/
+
+# IDE / OS
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
