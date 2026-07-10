@@ -1,0 +1,48 @@
+cmake_minimum_required(VERSION 3.22)
+
+project(PsiSpectral VERSION 0.1.0 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ── JUCE 8 (fetched automatically; no manual install needed) ─────────────────
+include(FetchContent)
+FetchContent_Declare(JUCE
+  GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+  GIT_TAG 8.0.4
+  GIT_SHALLOW ON)
+FetchContent_MakeAvailable(JUCE)
+
+# ── The plugin ───────────────────────────────────────────────────────────────
+# NOTE: NEEDS_WEB_BROWSER TRUE pulls in JUCE's WebBrowserComponent. On Windows
+# we use the WebView2 (Chromium) backend so the modern web UI renders — the
+# legacy IE backend cannot run it. See BUILD.md for the WebView2 requirement.
+juce_add_plugin(PsiSpectral
+  COMPANY_NAME "AudioLab"
+  BUNDLE_ID tools.audiolab.psi
+  PLUGIN_MANUFACTURER_CODE Aulb        # 4 chars — TODO Nathan: confirm
+  PLUGIN_CODE PsiS                     # 4 chars — TODO Nathan: confirm
+  FORMATS VST3 Standalone
+  PRODUCT_NAME "Psi Spectral"
+  NEEDS_WEB_BROWSER TRUE)
+
+target_sources(PsiSpectral PRIVATE
+  src/PluginProcessor.cpp
+  src/PluginEditor.cpp)
+
+target_compile_definitions(PsiSpectral PUBLIC
+  JUCE_WEB_BROWSER=1
+  JUCE_USE_WIN_WEBVIEW2=1              # Chromium backend on Windows
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_USE_CURL=0
+  JUCE_DISPLAY_SPLASH_SCREEN=0)
+
+target_include_directories(PsiSpectral PRIVATE dsp)
+
+target_link_libraries(PsiSpectral
+  PRIVATE
+    juce::juce_audio_utils
+    juce::juce_gui_extra
+  PUBLIC
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
