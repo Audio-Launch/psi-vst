@@ -32,7 +32,8 @@ target_sources(PsiSpectral PRIVATE
 
 target_compile_definitions(PsiSpectral PUBLIC
   JUCE_WEB_BROWSER=1
-  JUCE_USE_WIN_WEBVIEW2=1              # Chromium backend on Windows
+  JUCE_USE_WIN_WEBVIEW2=1                        # Chromium backend on Windows
+  JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1    # use WebView2LoaderStatic.lib — no loose DLL needed
   JUCE_VST3_CAN_REPLACE_VST2=0
   JUCE_USE_CURL=0
   JUCE_DISPLAY_SPLASH_SCREEN=0)
@@ -46,3 +47,11 @@ target_link_libraries(PsiSpectral
   PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+
+# ── WebView2 SDK — Chromium backend so the web UI renders (Windows) ───────────
+# SDK fetched from the Microsoft.Web.WebView2 NuGet into third_party/ (git-ignored).
+if (WIN32)
+  set(WEBVIEW2 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/webview2/build/native")
+  target_include_directories(PsiSpectral PRIVATE "${WEBVIEW2}/include")
+  target_link_libraries(PsiSpectral PRIVATE "${WEBVIEW2}/x64/WebView2LoaderStatic.lib")
+endif()

@@ -12,6 +12,9 @@ out/
 # JUCE (fetched, not vendored)
 JUCE/
 
+# WebView2 SDK (fetched from NuGet, not vendored)
+third_party/
+
 # IDE / OS
 .vs/
 .idea/
