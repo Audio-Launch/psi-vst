@@ -3,18 +3,23 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "PluginProcessor.h"
 
-// The whole editor is one WebView filling the window, hosting the Ψ web UI.
-class PsiEditor : public juce::AudioProcessorEditor
+// The editor is one WebView hosting the Ψ web UI, plus a timer that pushes the
+// output meter to the UI over the native bridge (C++ → JS "meter" event).
+class PsiEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
     explicit PsiEditor (PsiProcessor&);
+    ~PsiEditor() override;
     void resized() override;
 
 private:
-    // WebView2 (Chromium) backend so the modern React/WebGL/CSS UI renders.
+    void timerCallback() override;
+
+    PsiProcessor& proc;
     juce::WebBrowserComponent web {
         juce::WebBrowserComponent::Options{}
             .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
+            .withNativeIntegrationEnabled()
             .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
                 .withUserDataFolder (juce::File::getSpecialLocation (juce::File::tempDirectory)))
     };
