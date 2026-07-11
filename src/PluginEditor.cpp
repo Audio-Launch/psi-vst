@@ -1,10 +1,19 @@
 #include "PluginEditor.h"
 
+static juce::WebBrowserComponent::Options makeOptions (PsiProcessor* pp)
+{
+    return juce::WebBrowserComponent::Options{}
+        .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
+        .withNativeIntegrationEnabled()
+        .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
+            .withUserDataFolder (juce::File::getSpecialLocation (juce::File::tempDirectory)))
+        .withEventListener ("eq", [pp] (juce::var v) { pp->applyEqEvent (v); }); // UI EQ curve → DSP
+}
+
 PsiEditor::PsiEditor (PsiProcessor& p)
-    : AudioProcessorEditor (&p), proc (p)
+    : AudioProcessorEditor (&p), proc (p), web (makeOptions (&p))
 {
     addAndMakeVisible (web);
-    // v0.1/0.2: load the running dev server. (Ship: bundle + serve from a resource provider.)
     web.goToURL ("http://localhost:4321/plugin");
     setResizable (true, true);
     setResizeLimits (900, 560, 3000, 2000);
