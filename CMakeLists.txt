@@ -44,6 +44,7 @@ target_link_libraries(PsiSpectral
   PRIVATE
     juce::juce_audio_utils
     juce::juce_gui_extra
+    juce::juce_cryptography              # SHA256 for the PKCE challenge (DeviceConnect.h)
   PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
@@ -54,4 +55,24 @@ if (WIN32)
   set(WEBVIEW2 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/webview2/build/native")
   target_include_directories(PsiSpectral PRIVATE "${WEBVIEW2}/include")
   target_link_libraries(PsiSpectral PRIVATE "${WEBVIEW2}/x64/WebView2LoaderStatic.lib")
+  target_link_libraries(PsiSpectral PRIVATE bcrypt) # BCryptGenRandom — PKCE verifier entropy
+endif()
+
+# ── Self-contained UI: bake the built web bundle into the plugin ──────────────
+# Release (default): the WebView is served from webui.zip embedded as BinaryData, so
+# the plugin needs NO running dev server. Regenerate the zip with scripts/bundle-ui.ps1
+# whenever the web UI changes, then rebuild. Dev loop: configure with -DPSI_DEV_SERVER=ON
+# to instead load http://localhost:4321/plugin (Vite hot-reload).
+option(PSI_DEV_SERVER "Load the UI from the Vite dev server instead of the embedded bundle" OFF)
+
+if (PSI_DEV_SERVER)
+  target_compile_definitions(PsiSpectral PRIVATE PSI_DEV_SERVER=1)
+else()
+  set(PSI_WEBUI_ZIP "${CMAKE_CURRENT_SOURCE_DIR}/webui.zip")
+  if (NOT EXISTS "${PSI_WEBUI_ZIP}")
+    message(FATAL_ERROR "webui.zip not found. Run scripts/bundle-ui.ps1 first, or configure with -DPSI_DEV_SERVER=ON for the dev loop.")
+  endif()
+  juce_add_binary_data(PsiWebUI SOURCES "${PSI_WEBUI_ZIP}")
+  target_link_libraries(PsiSpectral PRIVATE PsiWebUI)
+  target_compile_definitions(PsiSpectral PRIVATE PSI_DEV_SERVER=0)
 endif()

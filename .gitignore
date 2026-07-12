@@ -20,3 +20,7 @@ third_party/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated web bundle (scripts/bundle-ui.ps1) + local logs
+webui.zip
+*.log
