@@ -2,6 +2,10 @@
 #include <optional>
 #include <cstring>
 
+#if JUCE_WINDOWS
+ #include <dpapi.h> // CryptProtectData/CryptUnprotectData — user-scoped key-at-rest (crypt32)
+#endif
+
 #if ! PSI_DEV_SERVER
  #include "BinaryData.h"
 
@@ -92,7 +96,8 @@ static juce::WebBrowserComponent::Options makeOptions (PsiProcessor* pp, PsiEdit
         .withEventListener ("disconnect",  [ed] (juce::var)   { ed->disconnectAccount(); })
         .withEventListener ("openaccount", [ed] (juce::var)   { ed->openAccount(); })       // manage in the browser
         .withEventListener ("rec",         [ed] (juce::var v) { ed->handleRec (v); })       // DAW-bus capture
-        .withEventListener ("lab",         [ed] (juce::var v) { ed->handleLab (v); });      // Labs cloud runs
+        .withEventListener ("lab",         [ed] (juce::var v) { ed->handleLab (v); })       // Labs cloud runs
+        .withEventListener ("saveviz",     [ed] (juce::var v) { ed->handleSaveViz (v); });  // PNG share hook
    #if PSI_DEV_SERVER
     // Dev: the page is on localhost, so the capture fetch to https://juce.backend/ is
     // cross-origin — allow it. Only the capture endpoint is served here.
@@ -145,22 +150,59 @@ juce::File PsiEditor::credsFile() const
 
 void PsiEditor::handleConnect() { deviceConnect.start (PSI_CONNECT_BASE); }
 
+#if JUCE_WINDOWS
+// User-scoped encrypt/decrypt of the stored credentials (DPAPI): only this Windows user on
+// this machine can read the key back. Returns empty on failure.
+static juce::MemoryBlock dpapi (const void* data, size_t size, bool protect)
+{
+    DATA_BLOB in { (DWORD) size, (BYTE*) data }, out {};
+    const bool ok = protect
+        ? CryptProtectData   (&in, L"PsiSpectral", nullptr, nullptr, nullptr, 0, &out)
+        : CryptUnprotectData (&in, nullptr, nullptr, nullptr, nullptr, 0, &out);
+    if (! ok) return {};
+    juce::MemoryBlock r (out.pbData, out.cbData);
+    LocalFree (out.pbData);
+    return r;
+}
+#endif
+
+juce::var PsiEditor::readCreds() const
+{
+    juce::MemoryBlock raw;
+    if (! credsFile().loadFileAsData (raw) || raw.isEmpty()) return {};
+   #if JUCE_WINDOWS
+    const auto plain = dpapi (raw.getData(), raw.getSize(), false);
+    if (! plain.isEmpty())
+        return juce::JSON::parse (plain.toString());
+   #endif
+    // Legacy plaintext account.json (pre-DPAPI installs) still parses; the next write encrypts.
+    return juce::JSON::parse (raw.toString());
+}
+
+void PsiEditor::writeCreds (const juce::var& v) const
+{
+    const auto json = juce::JSON::toString (v);
+    const auto f = credsFile();
+    f.getParentDirectory().createDirectory();
+   #if JUCE_WINDOWS
+    const auto enc = dpapi (json.toRawUTF8(), json.getNumBytesAsUTF8(), true);
+    if (! enc.isEmpty()) { f.replaceWithData (enc.getData(), enc.getSize()); return; }
+   #endif
+    f.replaceWithText (json); // non-Windows / DPAPI failure: fall back to plaintext
+}
+
 void PsiEditor::onKeyReceived (juce::String key, juce::String email)
 {
-    // ponytail: plaintext in the user's app-data dir (user-scoped, and the key is a revocable
-    // free-tier credential). Upgrade path = Windows DPAPI (CryptProtectData) for higher-value tokens.
     juce::DynamicObject::Ptr o = new juce::DynamicObject();
     o->setProperty ("key", key);
     o->setProperty ("email", email);
-    const auto f = credsFile();
-    f.getParentDirectory().createDirectory();
-    f.replaceWithText (juce::JSON::toString (juce::var (o.get())));
+    writeCreds (juce::var (o.get()));
     pushAccountState();
 }
 
 void PsiEditor::pushAccountState()
 {
-    const auto v = juce::JSON::parse (credsFile().loadFileAsString());
+    const auto v = readCreds();
     const auto email = v.getProperty ("email", juce::String()).toString();
     const auto key = v.getProperty ("key", juce::String()).toString();
     const bool connected = key.isNotEmpty();
@@ -195,8 +237,7 @@ static juce::String postJson (const juce::String& url, const juce::String& body,
 void PsiEditor::handleLab (const juce::var& v)
 {
     const auto action = v.getProperty ("action", juce::String()).toString();
-    const auto key = juce::JSON::parse (credsFile().loadFileAsString())
-                         .getProperty ("key", juce::String()).toString();
+    const auto key = readCreds().getProperty ("key", juce::String()).toString();
 
     auto emitError = [this] (const juce::String& msg)
     {
@@ -274,6 +315,22 @@ void PsiEditor::handleLab (const juce::var& v)
     }
 
     emitError ("Unknown lab action.");
+}
+
+// Save the exported screen PNG to the Desktop and reveal it — the share hook: one click,
+// one branded image ready to post. Filename is sanitised and never clobbers an earlier export.
+void PsiEditor::handleSaveViz (const juce::var& v)
+{
+    const auto b64 = v.getProperty ("png", juce::String()).toString();
+    if (b64.isEmpty()) return;
+    juce::MemoryOutputStream bytes;
+    if (! juce::Base64::convertFromBase64 (bytes, b64) || bytes.getDataSize() == 0) return;
+    const auto name = juce::File::createLegalFileName (v.getProperty ("name", "psi-spectral.png").toString());
+    const auto f = juce::File::getSpecialLocation (juce::File::userDesktopDirectory)
+                     .getChildFile (name.endsWith (".png") ? name : name + ".png")
+                     .getNonexistentSibling();
+    if (f.replaceWithData (bytes.getData(), bytes.getDataSize()))
+        f.revealToUser();
 }
 
 void PsiEditor::handleRec (const juce::var& v)

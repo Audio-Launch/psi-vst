@@ -55,7 +55,8 @@ if (WIN32)
   set(WEBVIEW2 "${CMAKE_CURRENT_SOURCE_DIR}/third_party/webview2/build/native")
   target_include_directories(PsiSpectral PRIVATE "${WEBVIEW2}/include")
   target_link_libraries(PsiSpectral PRIVATE "${WEBVIEW2}/x64/WebView2LoaderStatic.lib")
-  target_link_libraries(PsiSpectral PRIVATE bcrypt) # BCryptGenRandom — PKCE verifier entropy
+  target_link_libraries(PsiSpectral PRIVATE bcrypt)  # BCryptGenRandom — PKCE verifier entropy
+  target_link_libraries(PsiSpectral PRIVATE crypt32) # CryptProtectData — DPAPI key-at-rest
 endif()
 
 # ── Self-contained UI: bake the built web bundle into the plugin ──────────────

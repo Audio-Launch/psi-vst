@@ -22,12 +22,15 @@ public:
     void openAccount();         // "openaccount" → open audiolab.tools/account in the browser
     void handleRec (const juce::var&); // "rec" {action:start|stop} → DAW-bus capture (local)
     void handleLab (const juce::var&); // "lab" {action:prepare|run} → cloud analysis (key stays here)
+    void handleSaveViz (const juce::var&); // "saveviz" {png,name} → PNG to the Desktop (share hook)
 
 private:
     void timerCallback() override;
     void onKeyReceived (juce::String key, juce::String email); // message thread, from DeviceConnect
     void fetchAndPushUsage (juce::String key, juce::String email); // bg fetch → re-emit "account" with usage
     juce::File credsFile() const;
+    juce::var readCreds() const;                 // DPAPI-decrypts account.json (accepts legacy plaintext)
+    void writeCreds (const juce::var&) const;    // DPAPI-encrypts before writing
 
     PsiProcessor& proc;
     DeviceConnect deviceConnect;     // declared before web so the "connect" listener can use it
