@@ -21,6 +21,7 @@ public:
     void disconnectAccount();   // "disconnect"  → forget the stored key
     void openAccount();         // "openaccount" → open audiolab.tools/account in the browser
     void handleRec (const juce::var&); // "rec" {action:start|stop} → DAW-bus capture (local)
+    void handleLab (const juce::var&); // "lab" {action:prepare|run} → cloud analysis (key stays here)
 
 private:
     void timerCallback() override;

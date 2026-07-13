@@ -15,7 +15,7 @@
 | Architectuur & code | 3 | 4 | Monoliet ~1500 regels; C++ nu netjes gelaagd (DSP/capture/connect) maar web-kant blijft één file |
 | Performance | 3.5 | 4.5 | UI 60fps; EQ-DSP live zonder klachten; nog geen systematische DSP-load-meting |
 | Robuustheid | 4 | 4.5 | Zelfstandige bundel (geen dev-server-gat meer, it.4); capture-review: 3 race/UB-wortels gefixt (it.6); rest = brede host-matrix |
-| **Labs / platform-integratie (v1.1)** | 0 | 4.5 | Nog niet gebouwd — amendement wacht op verificatie; endpoints + uploadpad bestaan al server-side |
+| **Labs / platform-integratie (v1.1)** | 3 | 4.5 | It.7: tab + MixLab analyse/target-check e2e gebouwd (kostenlabels, gates, rapport-tiles, watchdog); rest = FL-e2e-bevestiging + Should-labs (spectrum/voice/compare) + history-link zichtbaar |
 
 **Totaal / gemiddelde (excl. nieuwe dimensie):** 3.8 · **Vooruitgang sinds it.3:** +0.4 (EQ-DSP + bundel + capture + modes)
 
@@ -25,6 +25,7 @@
 3. **Functionaliteit → 4.5** — morph-DSP live (duurste blok; batchen).
 
 ## Iteratielog
+- **Iteratie 7 (2026-07-13):** Labs-tab (PDD v1.1 Must) — '⚗ Labs' naast 2D/3D/Viz; MixLab loudness-analyse + target-check op de capture; '1 call · ~MB'-labels; key blijft in C++ (signed-URL-keten). Review-fixes: geneste /v1-fouten → string vóór render; tile-keys = echte engine-keys; 90s-watchdog tegen dode knoppen. Labs 0→3. **Pending: install + FL-e2e.** Processnotitie: reviews voortaan zelf/gericht (tokenfeedback Nathan).
 - **Iteratie 6 (2026-07-13):** DAW-bus capture — C++ tap (post-EQ stereo, 60s, arm-flag reset op de audio-thread) + `/__capture.f32` resource + Record-knoppen (File/empty/transport) + kosten-chip "local DSP · 0 API". Adversariële review: 7 bevindingen → 3 wortels gefixt (capturePos-reset in prepareToPlay; CriticalSection om setSize vs memcpy; stopCapture in ~PsiEditor). Functionaliteit 3→3.5, Robuustheid → 4. **Pending: FL-test.**
 - **Iteratie 5 (2026-07-12/13):** mode-presets + pass-thru live-surface; RFC 8252 device-connect (PKCE, BCryptGenRandom, back-channel exchange) + in-VST usage-stats; account-koppeling e2e bevestigd in FL.
 - **Iteratie 4 (2026-07-11/12):** 48-band M/S EQ-DSP live (biquads, dubbel-gebufferde gains); zelfstandige bundel (webui.zip + resource-provider) — dev-server-gat dicht. Functionaliteit 1.5→3, Robuustheid 3→4.

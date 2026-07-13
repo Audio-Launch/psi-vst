@@ -1,7 +1,7 @@
 # Project Design Document (PDD) — Ψ Spectral
 
 > Bron van waarheid voor het hele bouwproces. De loop meet elke iteratie tegen dit document.
-> Versie: 1.1-CONCEPT · Datum: 2026-07-13 · Status: v1.0 geverifieerd (2026-07-10); **v1.1-amendement (Labs-tab) WACHT OP VERIFICATIE**
+> Versie: 1.1 · Datum: 2026-07-13 · Status: geverifieerd (Nathan akkoord: v1.0 2026-07-10, v1.1 2026-07-13). Rapport-referentie-screenshot: niet geleverd → huisstijl /account-stat-tiles is het ijkpunt (genoteerd als gat, gecompenseerd met Youlean/Loudness-Penalty-patronen uit onderzoek).
 
 ## 1. Visie & probleem
 **Ψ Spectral** = een gratis, beeldschone, tactiele VST die je je sound laat **zien, meten én boetseren** — "control time & space in audio." Wint niet als "weer een EQ" (dat veld is bloedig), maar op wat niemand heeft: **live meten (LUFS/dBTP) in de EQ zelf** + een **screenshot-waardige visualizer**, in een **hardware-jasje**. Doel: AudioLab bekend maken (de viz = de deel-haak) en funnelen naar de betaalde platform-laag.

@@ -91,7 +91,8 @@ static juce::WebBrowserComponent::Options makeOptions (PsiProcessor* pp, PsiEdit
         .withEventListener ("account-req", [ed] (juce::var)   { ed->pushAccountState(); }) // UI asks on mount
         .withEventListener ("disconnect",  [ed] (juce::var)   { ed->disconnectAccount(); })
         .withEventListener ("openaccount", [ed] (juce::var)   { ed->openAccount(); })       // manage in the browser
-        .withEventListener ("rec",         [ed] (juce::var v) { ed->handleRec (v); });      // DAW-bus capture
+        .withEventListener ("rec",         [ed] (juce::var v) { ed->handleRec (v); })       // DAW-bus capture
+        .withEventListener ("lab",         [ed] (juce::var v) { ed->handleLab (v); });      // Labs cloud runs
    #if PSI_DEV_SERVER
     // Dev: the page is on localhost, so the capture fetch to https://juce.backend/ is
     // cross-origin — allow it. Only the capture endpoint is served here.
@@ -175,6 +176,104 @@ void PsiEditor::disconnectAccount() { credsFile().deleteFile(); pushAccountState
 void PsiEditor::openAccount()
 {
     juce::URL (juce::String (PSI_CONNECT_BASE) + "/account").launchInDefaultBrowser();
+}
+
+// POST a JSON body with the device key as bearer; returns the raw response ("" on network fail).
+static juce::String postJson (const juce::String& url, const juce::String& body, const juce::String& bearer)
+{
+    const auto u = juce::URL (url).withPOSTData (body);
+    const auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+        .withExtraHeaders ("Content-Type: application/json\r\nAuthorization: Bearer " + bearer)
+        .withConnectionTimeoutMs (30000);
+    std::unique_ptr<juce::InputStream> in (u.createInputStream (opts));
+    return in != nullptr ? in->readEntireStreamAsString() : juce::String();
+}
+
+// Labs tab — the plugin half of a cloud run. Two steps, both on a background thread, key
+// never leaves this process: "prepare" mints a one-shot signed upload URL for the UI to PUT
+// the wav to; "run" fires the /v1 analysis on the uploaded objectPath and relays the report.
+void PsiEditor::handleLab (const juce::var& v)
+{
+    const auto action = v.getProperty ("action", juce::String()).toString();
+    const auto key = juce::JSON::parse (credsFile().loadFileAsString())
+                         .getProperty ("key", juce::String()).toString();
+
+    auto emitError = [this] (const juce::String& msg)
+    {
+        juce::DynamicObject::Ptr o = new juce::DynamicObject();
+        o->setProperty ("action", "error");
+        o->setProperty ("error", msg);
+        web.emitEventIfBrowserIsVisible ("lab", juce::var (o.get()));
+    };
+    if (key.isEmpty()) { emitError ("Connect your AudioLab account first."); return; }
+
+    juce::Component::SafePointer<PsiEditor> safe (this);
+
+    if (action == "prepare")
+    {
+        juce::DynamicObject::Ptr req = new juce::DynamicObject();
+        req->setProperty ("contentType", v.getProperty ("contentType", "audio/wav"));
+        req->setProperty ("size", v.getProperty ("size", 0));
+        const auto body = juce::JSON::toString (juce::var (req.get()), true);
+        juce::Thread::launch ([safe, key, body]
+        {
+            const auto r = juce::JSON::parse (postJson (juce::String (PSI_CONNECT_BASE) + "/api/upload-url", body, key));
+            juce::MessageManager::callAsync ([safe, r]
+            {
+                if (safe == nullptr) return;
+                juce::DynamicObject::Ptr o = new juce::DynamicObject();
+                if (r.hasProperty ("signedUrl"))
+                {
+                    o->setProperty ("action", "upload");
+                    o->setProperty ("signedUrl",  r.getProperty ("signedUrl",  juce::String()));
+                    o->setProperty ("objectPath", r.getProperty ("objectPath", juce::String()));
+                }
+                else
+                {
+                    o->setProperty ("action", "error");
+                    o->setProperty ("error", r.getProperty ("error", "Could not prepare the upload - check your connection."));
+                }
+                safe->web.emitEventIfBrowserIsVisible ("lab", juce::var (o.get()));
+            });
+        });
+        return;
+    }
+
+    if (action == "run")
+    {
+        const auto tool = v.getProperty ("tool", juce::String()).toString();
+        // Allowlist shape: "<lab>/<tool>", lowercase + dashes only — the URL is built from this.
+        if (! tool.containsChar ('/') || ! tool.containsOnly ("abcdefghijklmnopqrstuvwxyz-/") || tool.length() > 40)
+            { emitError ("Unknown tool."); return; }
+
+        juce::DynamicObject::Ptr req = new juce::DynamicObject();
+        req->setProperty ("objectPath", v.getProperty ("objectPath", juce::String()));
+        if (auto* p = v.getProperty ("params", juce::var()).getDynamicObject())
+            for (const auto& kv : p->getProperties())
+                req->setProperty (kv.name, kv.value);
+        const auto body = juce::JSON::toString (juce::var (req.get()), true);
+
+        juce::Thread::launch ([safe, key, tool, body]
+        {
+            const auto raw = postJson (juce::String (PSI_CONNECT_BASE) + "/v1/" + tool, body, key);
+            const auto r = juce::JSON::parse (raw);
+            juce::MessageManager::callAsync ([safe, tool, r, raw]
+            {
+                if (safe == nullptr) return;
+                juce::DynamicObject::Ptr o = new juce::DynamicObject();
+                if (raw.isEmpty() || ! r.isObject())
+                    { o->setProperty ("action", "error"); o->setProperty ("error", "Network error - try again."); }
+                else if (r.hasProperty ("error"))
+                    { o->setProperty ("action", "error"); o->setProperty ("error", r.getProperty ("error", juce::String())); }
+                else
+                    { o->setProperty ("action", "result"); o->setProperty ("tool", tool); o->setProperty ("result", r); }
+                safe->web.emitEventIfBrowserIsVisible ("lab", juce::var (o.get()));
+            });
+        });
+        return;
+    }
+
+    emitError ("Unknown lab action.");
 }
 
 void PsiEditor::handleRec (const juce::var& v)
