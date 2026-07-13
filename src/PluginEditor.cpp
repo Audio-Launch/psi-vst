@@ -329,8 +329,13 @@ void PsiEditor::handleSaveViz (const juce::var& v)
     const auto f = juce::File::getSpecialLocation (juce::File::userDesktopDirectory)
                      .getChildFile (name.endsWith (".png") ? name : name + ".png")
                      .getNonexistentSibling();
-    if (f.replaceWithData (bytes.getData(), bytes.getDataSize()))
-        f.revealToUser();
+    const bool ok = f.replaceWithData (bytes.getData(), bytes.getDataSize());
+    // Ack so the UI can confirm loudly — a silent save reads as "nothing happened".
+    juce::DynamicObject::Ptr o = new juce::DynamicObject();
+    o->setProperty ("saved", ok);
+    o->setProperty ("name", f.getFileName());
+    web.emitEventIfBrowserIsVisible ("saveviz", juce::var (o.get()));
+    if (ok) f.revealToUser();
 }
 
 void PsiEditor::handleRec (const juce::var& v)
@@ -380,6 +385,10 @@ void PsiEditor::timerCallback()
     o->setProperty ("rms",  m.rms);
     o->setProperty ("peak", m.peak);
     o->setProperty ("lufs", m.lufs);
+    // Live capture progress rides the same 30Hz event — drives the UI's REC strip, and lets
+    // it detect the 60s capacity auto-stop (recording flips false while it still shows 'rec').
+    o->setProperty ("recording", proc.isCapturing());
+    o->setProperty ("recSecs",   proc.captureSampleRate() > 0 ? proc.captureSamples() / proc.captureSampleRate() : 0.0);
     web.emitEventIfBrowserIsVisible ("meter", juce::var (o.get()));
 }
 

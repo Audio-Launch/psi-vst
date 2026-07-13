@@ -48,6 +48,7 @@ public:
     void startCapture()             { captureArm.store (true); }
     void stopCapture()              { captureArm.store (false); capturing.store (false); }
     int  captureSamples() const     { return capturePos.load (std::memory_order_acquire); }
+    bool isCapturing() const        { return capturing.load(); }
     double captureSampleRate() const { return sr; }
     const juce::AudioBuffer<float>& captureBuffer() const { return capture; }
     // Guards capture buffer IDENTITY (setSize in prepareToPlay) against the message-thread
