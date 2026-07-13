@@ -46,6 +46,17 @@ void PsiProcessor::prepareToPlay (double sampleRate, int)
     msAlpha = 1.0 - std::exp (-1.0 / (0.4 * sr));
     for (int r = 0; r < 2; ++r) for (int k = 0; k < NUM_FILTERS; ++k) eqZ[r][k][0] = eqZ[r][k][1] = 0.0;
     eqDirty.store (true);
+
+    // Capture buffer for "Record master bus" — allocated here, written by processBlock.
+    // Reset the whole capture state: a re-prepare mid-capture (sample-rate change, host
+    // re-init) must never leave a stale capturePos pointing into a reallocated buffer.
+    capturing.store (false);
+    captureArm.store (false);
+    capturePos.store (0);
+    {
+        const juce::ScopedLock sl (captureLock); // vs a concurrent captureResource memcpy
+        capture.setSize (2, (int) (sr * MAX_CAPTURE_SECONDS));
+    }
 }
 
 void PsiProcessor::applyEqEvent (const juce::var& v)
@@ -119,6 +130,24 @@ void PsiProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             }
             else L[i] = (float) m;
         }
+    }
+
+    // ── DAW-bus capture (post-EQ, what you hear) — appends into the pre-allocated buffer ──
+    // The audio thread owns the position reset: consume the arm flag here so the reset can
+    // never race one of our own in-flight stores.
+    if (captureArm.exchange (false)) { capturePos.store (0); capturing.store (true); }
+    if (capturing.load (std::memory_order_relaxed))
+    {
+        const int cap = capture.getNumSamples();
+        const int pos = capturePos.load (std::memory_order_relaxed);
+        const int m   = juce::jmin (n, cap - pos);
+        if (m > 0)
+        {
+            capture.copyFrom (0, pos, buffer, 0, 0, m);
+            capture.copyFrom (1, pos, buffer, nc > 1 ? 1 : 0, 0, m);
+            capturePos.store (pos + m, std::memory_order_release);
+        }
+        if (pos + m >= cap) capturing.store (false); // buffer full — auto-stop
     }
 
     // ── output metering (post-EQ): peak / RMS / K-weighted momentary loudness ──

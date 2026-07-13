@@ -1,8 +1,9 @@
 #include "PluginEditor.h"
+#include <optional>
+#include <cstring>
 
 #if ! PSI_DEV_SERVER
  #include "BinaryData.h"
- #include <optional>
 
 // ── Serve the embedded web bundle (webui.zip) straight to the WebView, so the plugin
 //    needs no dev server. Root "/" -> the plugin page; every other path maps 1:1 to a
@@ -60,6 +61,24 @@ static std::optional<juce::WebBrowserComponent::Resource> getWebResource (const 
  #define PSI_CONNECT_BASE "https://audiolab.tools"
 #endif
 
+// Serve the finished DAW-bus capture to the UI as raw float32, planar (ch0 then ch1) —
+// no chunked bridge events, just one fetch of /__capture.f32. Message thread only.
+static std::optional<juce::WebBrowserComponent::Resource> captureResource (PsiProcessor* pp)
+{
+    // Lock vs prepareToPlay's setSize (a sample-rate change mid-read would free the block
+    // under this memcpy — prepareToPlay isn't guaranteed to run on the message thread).
+    const juce::ScopedLock sl (pp->captureGuard());
+    const auto& buf = pp->captureBuffer();
+    const int m = juce::jmin (pp->captureSamples(), buf.getNumSamples());
+    std::vector<std::byte> bytes ((size_t) m * 2 * sizeof (float));
+    if (m > 0)
+    {
+        std::memcpy (bytes.data(),                              buf.getReadPointer (0), (size_t) m * sizeof (float));
+        std::memcpy (bytes.data() + (size_t) m * sizeof (float), buf.getReadPointer (1), (size_t) m * sizeof (float));
+    }
+    return juce::WebBrowserComponent::Resource { std::move (bytes), "application/octet-stream" };
+}
+
 static juce::WebBrowserComponent::Options makeOptions (PsiProcessor* pp, PsiEditor* ed)
 {
     auto opts = juce::WebBrowserComponent::Options{}
@@ -71,9 +90,23 @@ static juce::WebBrowserComponent::Options makeOptions (PsiProcessor* pp, PsiEdit
         .withEventListener ("connect",     [ed] (juce::var)   { ed->handleConnect(); })    // start account link
         .withEventListener ("account-req", [ed] (juce::var)   { ed->pushAccountState(); }) // UI asks on mount
         .withEventListener ("disconnect",  [ed] (juce::var)   { ed->disconnectAccount(); })
-        .withEventListener ("openaccount", [ed] (juce::var)   { ed->openAccount(); });      // manage in the browser
-   #if ! PSI_DEV_SERVER
-    opts = opts.withResourceProvider ([] (const juce::String& url) { return getWebResource (url); });
+        .withEventListener ("openaccount", [ed] (juce::var)   { ed->openAccount(); })       // manage in the browser
+        .withEventListener ("rec",         [ed] (juce::var v) { ed->handleRec (v); });      // DAW-bus capture
+   #if PSI_DEV_SERVER
+    // Dev: the page is on localhost, so the capture fetch to https://juce.backend/ is
+    // cross-origin — allow it. Only the capture endpoint is served here.
+    opts = opts.withResourceProvider ([pp] (const juce::String& url)
+        -> std::optional<juce::WebBrowserComponent::Resource>
+    {
+        if (url == "/__capture.f32") return captureResource (pp);
+        return std::nullopt;
+    }, juce::String ("http://localhost:4321"));
+   #else
+    opts = opts.withResourceProvider ([pp] (const juce::String& url)
+    {
+        if (url == "/__capture.f32") return captureResource (pp);
+        return getWebResource (url);
+    });
    #endif
     return opts;
 }
@@ -99,7 +132,9 @@ PsiEditor::PsiEditor (PsiProcessor& p)
     startTimerHz (30); // push the output meter to the UI
 }
 
-PsiEditor::~PsiEditor() { stopTimer(); deviceConnect.stop(); }
+// A UI-driven capture has no consumer once the editor is gone — stop it, or a reopened
+// editor could press Record against a still-running orphan capture.
+PsiEditor::~PsiEditor() { stopTimer(); deviceConnect.stop(); proc.stopCapture(); }
 
 juce::File PsiEditor::credsFile() const
 {
@@ -140,6 +175,20 @@ void PsiEditor::disconnectAccount() { credsFile().deleteFile(); pushAccountState
 void PsiEditor::openAccount()
 {
     juce::URL (juce::String (PSI_CONNECT_BASE) + "/account").launchInDefaultBrowser();
+}
+
+void PsiEditor::handleRec (const juce::var& v)
+{
+    const auto action = v.getProperty ("action", juce::String()).toString();
+    if (action == "start") { proc.startCapture(); return; }
+    if (action != "stop") return;
+    proc.stopCapture();
+    // Ack with what was captured; the UI then fetches /__capture.f32. A processBlock already
+    // in flight may still write one trailing block — bounded and inaudible in the terrain.
+    juce::DynamicObject::Ptr o = new juce::DynamicObject();
+    o->setProperty ("samples",    proc.captureSamples());
+    o->setProperty ("sampleRate", proc.captureSampleRate());
+    web.emitEventIfBrowserIsVisible ("rec", juce::var (o.get()));
 }
 
 void PsiEditor::fetchAndPushUsage (juce::String key, juce::String email)

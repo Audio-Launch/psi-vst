@@ -20,6 +20,7 @@ public:
     void pushAccountState();    // "account-req" → push {connected, email} back to the UI
     void disconnectAccount();   // "disconnect"  → forget the stored key
     void openAccount();         // "openaccount" → open audiolab.tools/account in the browser
+    void handleRec (const juce::var&); // "rec" {action:start|stop} → DAW-bus capture (local)
 
 private:
     void timerCallback() override;

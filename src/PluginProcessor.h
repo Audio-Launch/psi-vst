@@ -39,6 +39,22 @@ public:
     struct MeterData { float rms = -100.0f, peak = -100.0f, lufs = -70.0f; };
     MeterData getMeter() const { return { rmsDb.load(), peakDb.load(), lufsDb.load() }; }
 
+    // DAW-bus capture ("Record master bus"): the audio thread appends post-EQ stereo into a
+    // pre-allocated buffer; the UI pulls it via the /__capture.f32 resource after stop. All
+    // local — no audio ever leaves the machine and no API call is involved.
+    // The position reset is ARMED here but executed by the audio thread itself (first block
+    // after arming), so a message-thread reset can never race an in-flight block's store.
+    static constexpr int MAX_CAPTURE_SECONDS = 60;
+    void startCapture()             { captureArm.store (true); }
+    void stopCapture()              { captureArm.store (false); capturing.store (false); }
+    int  captureSamples() const     { return capturePos.load (std::memory_order_acquire); }
+    double captureSampleRate() const { return sr; }
+    const juce::AudioBuffer<float>& captureBuffer() const { return capture; }
+    // Guards capture buffer IDENTITY (setSize in prepareToPlay) against the message-thread
+    // reader (captureResource memcpy). processBlock never takes it — the host already
+    // serialises prepareToPlay vs processBlock, and the audio thread must not lock.
+    const juce::CriticalSection& captureGuard() const { return captureLock; }
+
     // EQ update from the UI ("eq" bridge event): { q, bypass, m:[48 dB], s:[48 dB] }. Message thread.
     void applyEqEvent (const juce::var& v);
 
@@ -69,6 +85,13 @@ private:
     double msAlpha = 0.001;
 
     std::atomic<float> rmsDb { -100.0f }, peakDb { -100.0f }, lufsDb { -70.0f };
+
+    // Capture state — buffer allocated in prepareToPlay (never on the audio thread).
+    juce::AudioBuffer<float> capture;
+    juce::CriticalSection captureLock;
+    std::atomic<int>  capturePos { 0 };
+    std::atomic<bool> capturing { false };
+    std::atomic<bool> captureArm { false };   // set by startCapture; consumed by processBlock
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PsiProcessor)
 };
