@@ -31,6 +31,7 @@ target_sources(PsiSpectral PRIVATE
   src/PluginEditor.cpp)
 
 target_compile_definitions(PsiSpectral PUBLIC
+  PSI_VERSION="${PROJECT_VERSION}"                # synced with project(... VERSION); used by the update check
   JUCE_WEB_BROWSER=1
   JUCE_USE_WIN_WEBVIEW2=1                        # Chromium backend on Windows
   JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1    # use WebView2LoaderStatic.lib — no loose DLL needed

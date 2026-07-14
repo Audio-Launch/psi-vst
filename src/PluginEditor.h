@@ -23,9 +23,11 @@ public:
     void handleRec (const juce::var&); // "rec" {action:start|stop} → DAW-bus capture (local)
     void handleLab (const juce::var&); // "lab" {action:prepare|run} → cloud analysis (key stays here)
     void handleSaveViz (const juce::var&); // "saveviz" {png,name} → PNG to the Desktop (share hook)
+    void openDownload();        // "opendownload" → open audiolab.tools/download in the browser
 
 private:
     void timerCallback() override;
+    void checkForUpdate();      // bg GET /vst/version.json → emit "update" {version} if newer
     void onKeyReceived (juce::String key, juce::String email); // message thread, from DeviceConnect
     void fetchAndPushUsage (juce::String key, juce::String email); // bg fetch → re-emit "account" with usage
     juce::File credsFile() const;

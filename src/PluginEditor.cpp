@@ -97,7 +97,8 @@ static juce::WebBrowserComponent::Options makeOptions (PsiProcessor* pp, PsiEdit
         .withEventListener ("openaccount", [ed] (juce::var)   { ed->openAccount(); })       // manage in the browser
         .withEventListener ("rec",         [ed] (juce::var v) { ed->handleRec (v); })       // DAW-bus capture
         .withEventListener ("lab",         [ed] (juce::var v) { ed->handleLab (v); })       // Labs cloud runs
-        .withEventListener ("saveviz",     [ed] (juce::var v) { ed->handleSaveViz (v); });  // PNG share hook
+        .withEventListener ("saveviz",     [ed] (juce::var v) { ed->handleSaveViz (v); })   // PNG share hook
+        .withEventListener ("opendownload",[ed] (juce::var)   { ed->openDownload(); });      // update chip → /download
    #if PSI_DEV_SERVER
     // Dev: the page is on localhost, so the capture fetch to https://juce.backend/ is
     // cross-origin — allow it. Only the capture endpoint is served here.
@@ -136,6 +137,7 @@ PsiEditor::PsiEditor (PsiProcessor& p)
     setResizeLimits (900, 560, 3000, 2000);
     setSize (1360, 760);
     startTimerHz (30); // push the output meter to the UI
+    checkForUpdate();  // ask the site whether a newer build is out
 }
 
 // A UI-driven capture has no consumer once the editor is gone — stop it, or a reopened
@@ -218,6 +220,52 @@ void PsiEditor::disconnectAccount() { credsFile().deleteFile(); pushAccountState
 void PsiEditor::openAccount()
 {
     juce::URL (juce::String (PSI_CONNECT_BASE) + "/account").launchInDefaultBrowser();
+}
+
+void PsiEditor::openDownload()
+{
+    juce::URL (juce::String (PSI_CONNECT_BASE) + "/download").launchInDefaultBrowser();
+}
+
+// Dotted-version compare: true if `remote` is strictly newer than `local` (e.g. 0.2.0 > 0.1.9).
+static bool versionIsNewer (const juce::String& remote, const juce::String& local)
+{
+    auto parts = [] (const juce::String& v) {
+        juce::Array<int> out;
+        for (const auto& s : juce::StringArray::fromTokens (v.upToFirstOccurrenceOf ("-", false, false), ".", ""))
+            out.add (s.getIntValue());
+        return out;
+    };
+    const auto r = parts (remote), l = parts (local);
+    for (int i = 0; i < juce::jmax (r.size(), l.size()); ++i)
+    {
+        const int rv = i < r.size() ? r[i] : 0, lv = i < l.size() ? l[i] : 0;
+        if (rv != lv) return rv > lv;
+    }
+    return false;
+}
+
+// Ask the site for the latest published build; if it's newer than this compiled one, tell the
+// UI (which shows an "update available" chip). Best-effort, off the message thread, never blocks.
+void PsiEditor::checkForUpdate()
+{
+    juce::Component::SafePointer<PsiEditor> safe (this);
+    juce::Thread::launch ([safe]
+    {
+        const juce::URL url (juce::String (PSI_CONNECT_BASE) + "/vst/version.json");
+        const auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (6000);
+        std::unique_ptr<juce::InputStream> in (url.createInputStream (opts));
+        const auto v = in != nullptr ? juce::JSON::parse (in->readEntireStreamAsString()) : juce::var();
+        const auto latest = v.getProperty ("version", juce::String()).toString();
+        if (latest.isEmpty() || ! versionIsNewer (latest, PSI_VERSION)) return;
+        juce::MessageManager::callAsync ([safe, latest]
+        {
+            if (safe == nullptr) return;
+            juce::DynamicObject::Ptr o = new juce::DynamicObject();
+            o->setProperty ("version", latest);
+            safe->web.emitEventIfBrowserIsVisible ("update", juce::var (o.get()));
+        });
+    });
 }
 
 // POST a JSON body with the device key as bearer; returns the raw response ("" on network fail).
