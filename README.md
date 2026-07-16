@@ -5,6 +5,14 @@ morpher** as a cross-DAW plugin. Not a meter (every DAW ships those) — a phase
 that freezes, stretches, reverses, and smears audio. See `docs/product-vision.md` in the
 web repo for the strategy and the unique selling points.
 
+## Releasing
+
+New build to ship? Follow [`docs/RELEASE.md`](docs/RELEASE.md). Short version: bump
+`CMakeLists.txt` VERSION, rebuild, zip the `.vst3`, `gh release create v<X.Y.Z>` with the
+zip, then update `audiolab.tools/public/vst/version.json` (version + url + size + notes) and
+redeploy. The site's `/download` and the in-plugin update chip both read from
+`audiolab.tools/vst/version.json`, so wiring that one file is what actually ships the update.
+
 ## Status
 
 - ✅ **DSP core ported + verified.** The phase-vocoder algorithm from the browser lab
