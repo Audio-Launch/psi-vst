@@ -7,10 +7,17 @@ PsiProcessor::PsiProcessor()
         .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
-    // 48 log-spaced band centres, 30 Hz … 18 kHz (matches the web filter bank).
+    // 48 log-spaced band centres, 30 Hz … 18 kHz. A starting point only: the web
+    // UI sends its own table with every EQ event and that one wins, because it
+    // knows where it put the filters. Both buffers are filled so the audio thread
+    // reads something valid before the first event arrives.
     const double lo = std::log10 (30.0), hi = std::log10 (18000.0);
     for (int i = 0; i < NUM_FILTERS; ++i)
-        filterFreq[i] = std::pow (10.0, lo + (i / (double) (NUM_FILTERS - 1)) * (hi - lo));
+    {
+        const double f = std::pow (10.0, lo + (i / (double) (NUM_FILTERS - 1)) * (hi - lo));
+        filterFreq[0][i] = f;
+        filterFreq[1][i] = f;
+    }
 }
 
 static void makeHighPass (double* c, double sr, double f0, double Q)
@@ -61,13 +68,22 @@ void PsiProcessor::prepareToPlay (double sampleRate, int)
 
 void PsiProcessor::applyEqEvent (const juce::var& v)
 {
-    const int nb = 1 - gainIdx.load();
+    const int ab = gainIdx.load();       // the buffer the audio thread is reading
+    const int nb = 1 - ab;               // the one we may write
     auto* mArr = v.getProperty ("m", juce::var()).getArray();
     auto* sArr = v.getProperty ("s", juce::var()).getArray();
+    auto* fArr = v.getProperty ("freqs", juce::var()).getArray();
     for (int i = 0; i < NUM_FILTERS; ++i)
     {
         gainBuf[nb][0][i] = (mArr != nullptr && i < mArr->size()) ? (float) (double) (*mArr)[i] : 0.0f;
         gainBuf[nb][1][i] = (sArr != nullptr && i < sArr->size()) ? (float) (double) (*sArr)[i] : 0.0f;
+
+        // Follow the UI's band centres when it states them. A missing or absurd
+        // value keeps whatever is live rather than moving a filter somewhere it
+        // was never asked to go.
+        double f = (fArr != nullptr && i < fArr->size()) ? (double) (*fArr)[i] : 0.0;
+        if (! (f > 10.0 && f < 24000.0)) f = filterFreq[ab][i];
+        filterFreq[nb][i] = f;
     }
     eqQ.store ((float) (double) v.getProperty ("q", 4.5));
     eqBypass.store ((bool) v.getProperty ("bypass", false));
@@ -83,7 +99,7 @@ void PsiProcessor::recomputeEq()
         for (int k = 0; k < NUM_FILTERS; ++k)
         {
             const double A  = std::pow (10.0, (double) gainBuf[idx][role][k] / 40.0);
-            const double w0 = 2.0 * juce::MathConstants<double>::pi * filterFreq[k] / sr;
+            const double w0 = 2.0 * juce::MathConstants<double>::pi * filterFreq[idx][k] / sr;
             const double cw = std::cos (w0), sw = std::sin (w0), alpha = sw / (2.0 * Q);
             const double a0 = 1.0 + alpha / A;
             eqB[role][k][0] = (1.0 + alpha * A) / a0;

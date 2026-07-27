@@ -56,21 +56,32 @@ public:
     // serialises prepareToPlay vs processBlock, and the audio thread must not lock.
     const juce::CriticalSection& captureGuard() const { return captureLock; }
 
-    // EQ update from the UI ("eq" bridge event): { q, bypass, m:[48 dB], s:[48 dB] }. Message thread.
+    // EQ update from the UI ("eq" bridge event):
+    //   { q, bypass, m:[48 dB], s:[48 dB], freqs?:[48 Hz] }
+    // Message thread. `freqs` is optional so an older UI still works; when it is
+    // absent the previous band centres are kept.
     void applyEqEvent (const juce::var& v);
 
 private:
     void recomputeEq();  // audio thread, when eqDirty
 
     double sr = 48000.0;
-    double filterFreq[NUM_FILTERS] {};
+
+    // Band centres, double-buffered exactly like the gains below. They used to be
+    // computed once here and never touched, which was fine while the web UI used
+    // the same formula. It no longer does: the UI now centres each filter on the
+    // rows it owns, so it sends its table along and this has to follow. Writing a
+    // live array from the message thread while the audio thread reads it is a
+    // race, so it rides the same gainIdx flip that already makes the gains safe.
+    double filterFreq[2][NUM_FILTERS] {};
 
     // Peaking biquads: [role 0=Mid,1=Side][filter], coeffs (a0-normalised) + state.
     double eqB[2][NUM_FILTERS][3] {};   // b0,b1,b2
     double eqA[2][NUM_FILTERS][2] {};   // a1,a2
     double eqZ[2][NUM_FILTERS][2] {};   // z1,z2
 
-    // Target gains (double-buffered), Q, bypass — written on the message thread.
+    // Target gains (double-buffered, same index as filterFreq), Q, bypass —
+    // written on the message thread.
     float gainBuf[2][2][NUM_FILTERS] {};   // [bufIdx][role][filter] (dB)
     std::atomic<int>   gainIdx { 0 };
     std::atomic<float> eqQ { 4.5f };
