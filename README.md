@@ -6,6 +6,9 @@ capture-and-visualize view, drawn by a web UI inside the plugin (C++17, JUCE 8, 
 **Status: early alpha, v0.1.0.** Developed and tried in FL Studio; other hosts are untested.
 Not production software.
 
+**Built with AI assistance.** Every commit in this repository is co-authored with Claude
+(Anthropic); see the `Co-Authored-By` trailers in the history.
+
 ## What v0.1.0 does
 
 - **EQ.** A 48-band peaking EQ, applied to mid and side separately (mono input: mid only).
