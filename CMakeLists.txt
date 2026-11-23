@@ -16,12 +16,12 @@ FetchContent_MakeAvailable(JUCE)
 # ── The plugin ───────────────────────────────────────────────────────────────
 # NOTE: NEEDS_WEB_BROWSER TRUE pulls in JUCE's WebBrowserComponent. On Windows
 # we use the WebView2 (Chromium) backend so the modern web UI renders — the
-# legacy IE backend cannot run it. See BUILD.md for the WebView2 requirement.
+# legacy IE backend cannot run it. See the README (Build) for the WebView2 requirement.
 juce_add_plugin(PsiSpectral
   COMPANY_NAME "AudioLab"
   BUNDLE_ID tools.audiolab.psi
-  PLUGIN_MANUFACTURER_CODE Aulb        # 4 chars — TODO Nathan: confirm
-  PLUGIN_CODE PsiS                     # 4 chars — TODO Nathan: confirm
+  PLUGIN_MANUFACTURER_CODE Aulb        # 4 chars; shipped in v0.1.0, part of the VST3 class IDs
+  PLUGIN_CODE PsiS                     # 4 chars; shipped in v0.1.0, part of the VST3 class IDs
   FORMATS VST3 Standalone
   PRODUCT_NAME "Psi Spectral"
   NEEDS_WEB_BROWSER TRUE)

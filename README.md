@@ -78,8 +78,7 @@ matches the reference to within 1e-8 on the checked samples.
 - `src/` plugin: audio processor, editor and WebView bridge, account link
 - `dsp/` phase-vocoder reference and port, with tests (not wired into the plugin)
 - `scripts/` helper for bundling the UI
-- `docs/` working notes and plans from development, partly in Dutch. They describe intentions,
-  not shipped features.
+- `docs/RELEASE.md` the maintainer's release checklist (contains local paths)
 
 ## License
 
